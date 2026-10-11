@@ -4,11 +4,33 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:calculator_app/main.dart';
 
 void main() {
+  Future<void> startCalculator(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(440, 956);
+    tester.view.devicePixelRatio = 1;
+
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const CalculatorApp());
+    await tester.pumpAndSettle();
+  }
+
   Future<void> pressButton(
     WidgetTester tester,
     String label,
   ) async {
-    await tester.tap(find.widgetWithText(ElevatedButton, label));
+    final button = find.widgetWithText(
+      ElevatedButton,
+      label,
+      skipOffstage: false,
+    );
+
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+
+    await tester.tap(button);
     await tester.pumpAndSettle();
   }
 
@@ -21,131 +43,128 @@ void main() {
     }
   }
 
-  Future<void> checkDisplay(
-    WidgetTester tester,
-    String expected,
-  ) async {
+  void checkDisplay(String expected) {
     expect(find.text(expected), findsWidgets);
   }
 
   group('Calculator State Lab', () {
     testWidgets('Displays zero initially', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
-      expect(find.text('0'), findsWidgets);
+      checkDisplay('0');
     });
 
     testWidgets('Adds two numbers', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(tester, ['2', '+', '3', '=']);
 
-      await checkDisplay(tester, '5');
+      checkDisplay('5');
     });
 
     testWidgets('Evaluates left to right', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
         ['2', '+', '3', '×', '4', '='],
       );
 
-      await checkDisplay(tester, '20');
+      checkDisplay('20');
     });
 
     testWidgets('Replaces consecutive operators', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
         ['9', '+', '×', '2', '='],
       );
 
-      await checkDisplay(tester, '18');
+      checkDisplay('18');
     });
 
     testWidgets('Supports decimal calculations', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
         ['1', '.', '5', '+', '2', '.', '5', '='],
       );
 
-      await checkDisplay(tester, '4');
+      checkDisplay('4');
     });
 
     testWidgets('Prevents duplicate decimals', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
         ['1', '.', '.', '5'],
       );
 
-      await checkDisplay(tester, '1.5');
+      checkDisplay('1.5');
     });
 
     testWidgets('Calculates percentages', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(tester, ['5', '0', '%']);
 
-      await checkDisplay(tester, '0.5');
+      checkDisplay('0.5');
     });
 
     testWidgets('Calculates square roots', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(tester, ['9', '√']);
 
-      await checkDisplay(tester, '3');
+      checkDisplay('3');
     });
 
     testWidgets('Toggles number signs', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(tester, ['5', '±']);
 
-      await checkDisplay(tester, '-5');
+      checkDisplay('-5');
     });
 
     testWidgets('Deletes the last digit', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
         ['1', '2', '3', 'DEL'],
       );
 
-      await checkDisplay(tester, '12');
+      checkDisplay('12');
     });
 
     testWidgets('Clears the calculator', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
         ['8', '+', '2', 'AC'],
       );
 
-      await checkDisplay(tester, '0');
+      checkDisplay('0');
     });
 
     testWidgets('Shows division by zero error', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
         ['9', '÷', '0', '='],
       );
 
-      await checkDisplay(tester, 'Error');
+      checkDisplay('Error');
     });
 
     testWidgets('Saves calculation history', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(
         tester,
@@ -160,7 +179,7 @@ void main() {
     });
 
     testWidgets('Saves advanced operation history', (tester) async {
-      await tester.pumpWidget(const CalculatorApp());
+      await startCalculator(tester);
 
       await enterSequence(tester, ['9', '√']);
 
