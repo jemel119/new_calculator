@@ -34,6 +34,12 @@ class CalculatorPage extends StatefulWidget {
 class _CalculatorPageState extends State<CalculatorPage> {
   String display = '0';
 
+  double? accumulator;
+  String? pendingOperator;
+
+  bool awaitingOperand = false;
+  bool resultShown = false;
+
   final List<String> buttons = [
     'AC', 'DEL', '√', '÷',
     '7', '8', '9', '×',
@@ -43,16 +49,141 @@ class _CalculatorPageState extends State<CalculatorPage> {
     '%',
   ];
 
+  String formatNumber(double number) {
+    if (number == number.truncateToDouble()) {
+      return number.toInt().toString();
+    }
+
+    return number.toString();
+  }
+
+  double calculate(double first, double second, String operator) {
+    switch (operator) {
+      case '+':
+        return first + second;
+      case '−':
+        return first - second;
+      case '×':
+        return first * second;
+      case '÷':
+        return first / second;
+      default:
+        return second;
+    }
+  }
+
+  void enterDigit(String digit) {
+    setState(() {
+      if (resultShown) {
+        accumulator = null;
+        pendingOperator = null;
+        awaitingOperand = false;
+        resultShown = false;
+        display = digit;
+        return;
+      }
+
+      if (awaitingOperand) {
+        display = digit;
+        awaitingOperand = false;
+        return;
+      }
+
+      if (display == '0') {
+        display = digit;
+      } else {
+        display += digit;
+      }
+    });
+  }
+
+  void chooseOperator(String operator) {
+    setState(() {
+      final double current = double.parse(display);
+
+      if (awaitingOperand) {
+        pendingOperator = operator;
+        return;
+      }
+
+      if (accumulator != null && pendingOperator != null) {
+        accumulator = calculate(
+          accumulator!,
+          current,
+          pendingOperator!,
+        );
+      } else {
+        accumulator = current;
+      }
+
+      display = formatNumber(accumulator!);
+      pendingOperator = operator;
+      awaitingOperand = true;
+      resultShown = false;
+    });
+  }
+
+  void pressEquals() {
+    if (awaitingOperand ||
+        accumulator == null ||
+        pendingOperator == null) {
+      return;
+    }
+
+    setState(() {
+      final double current = double.parse(display);
+
+      final double result = calculate(
+        accumulator!,
+        current,
+        pendingOperator!,
+      );
+
+      display = formatNumber(result);
+      accumulator = null;
+      pendingOperator = null;
+      awaitingOperand = false;
+      resultShown = true;
+    });
+  }
+
+  void clearCalculator() {
+    setState(() {
+      display = '0';
+      accumulator = null;
+      pendingOperator = null;
+      awaitingOperand = false;
+      resultShown = false;
+    });
+  }
+
   void onButtonPressed(String value) {
-    // Calculator behavior will be added in the next steps.
+    if (RegExp(r'^[0-9]$').hasMatch(value)) {
+      enterDigit(value);
+      return;
+    }
+
+    if (['+', '−', '×', '÷'].contains(value)) {
+      chooseOperator(value);
+      return;
+    }
+
+    switch (value) {
+      case '=':
+        pressEquals();
+        break;
+      case 'AC':
+        clearCalculator();
+        break;
+    }
   }
 
   Widget buildButton(String value) {
-    final bool isOperator = ['÷', '×', '−', '+', '='].contains(value);
+    final bool isOperator =
+        ['÷', '×', '−', '+', '='].contains(value);
 
-    final bool isSpecial = [
-      'AC', 'DEL', '√', '±', '%',
-    ].contains(value);
+    final bool isSpecial =
+        ['AC', 'DEL', '√', '±', '%'].contains(value);
 
     return Padding(
       padding: const EdgeInsets.all(4),
