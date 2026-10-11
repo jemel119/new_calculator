@@ -50,11 +50,27 @@ class _CalculatorPageState extends State<CalculatorPage> {
   ];
 
   String formatNumber(double number) {
-    if (number == number.truncateToDouble()) {
-      return number.toInt().toString();
+    if (!number.isFinite) {
+      return 'Error';
     }
 
-    return number.toString();
+    if (number == 0) {
+      return '0';
+    }
+
+    if (number == number.truncateToDouble()) {
+      return number.toStringAsFixed(0);
+    }
+
+    final String formatted = number.toStringAsPrecision(12);
+
+    if (formatted.contains('e') || formatted.contains('E')) {
+      return formatted;
+    }
+
+    return formatted
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
   }
 
   double calculate(double first, double second, String operator) {
@@ -93,6 +109,29 @@ class _CalculatorPageState extends State<CalculatorPage> {
         display = digit;
       } else {
         display += digit;
+      }
+    });
+  }
+
+  void enterDecimal() {
+    setState(() {
+      if (resultShown) {
+        accumulator = null;
+        pendingOperator = null;
+        awaitingOperand = false;
+        resultShown = false;
+        display = '0.';
+        return;
+      }
+
+      if (awaitingOperand) {
+        display = '0.';
+        awaitingOperand = false;
+        return;
+      }
+
+      if (!display.contains('.')) {
+        display += '.';
       }
     });
   }
@@ -169,6 +208,9 @@ class _CalculatorPageState extends State<CalculatorPage> {
     }
 
     switch (value) {
+      case '.':
+        enterDecimal();
+        break;
       case '=':
         pressEquals();
         break;
