@@ -1,4 +1,5 @@
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 void main() {
@@ -43,6 +44,7 @@ class CalculationRecord {
 
 class _CalculatorPageState extends State<CalculatorPage> {
   String display = '0';
+  String currentExpression = '0';
 
   double? accumulator;
   String? pendingOperator;
@@ -51,6 +53,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
   bool resultShown = false;
 
   String expression = '';
+  String? errorMessage;
 
   final List<CalculationRecord> history = [];
 
@@ -102,82 +105,132 @@ class _CalculatorPageState extends State<CalculatorPage> {
     }
   }
 
+  void saveHistory(String calculation, String result) {
+    history.insert(
+      0,
+      CalculationRecord(
+        expression: calculation,
+        result: result,
+      ),
+    );
+  }
+
+  void showError(String message) {
+    setState(() {
+      errorMessage = message;
+      display = 'Error';
+      currentExpression = 'Error';
+      accumulator = null;
+      pendingOperator = null;
+      awaitingOperand = false;
+      resultShown = false;
+      expression = '';
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   void enterDigit(String digit) {
     setState(() {
-      if (resultShown) {
+      if (errorMessage != null || resultShown) {
+        errorMessage = null;
         accumulator = null;
         pendingOperator = null;
         awaitingOperand = false;
         resultShown = false;
         expression = '';
         display = digit;
+        currentExpression = digit;
         return;
       }
 
       if (awaitingOperand) {
         display = digit;
+        currentExpression = digit;
         awaitingOperand = false;
         return;
       }
 
       if (display == '0') {
         display = digit;
+        currentExpression = digit;
       } else {
         display += digit;
+        currentExpression = display;
       }
     });
   }
 
   void enterDecimal() {
     setState(() {
-      if (resultShown) {
+      if (errorMessage != null || resultShown) {
+        errorMessage = null;
         accumulator = null;
         pendingOperator = null;
         awaitingOperand = false;
         resultShown = false;
         expression = '';
         display = '0.';
+        currentExpression = '0.';
         return;
       }
 
       if (awaitingOperand) {
         display = '0.';
+        currentExpression = '0.';
         awaitingOperand = false;
         return;
       }
 
       if (!display.contains('.')) {
         display += '.';
+        currentExpression = display;
       }
     });
   }
 
   void chooseOperator(String operator) {
-    setState(() {
-      final double current = double.parse(display);
+    if (errorMessage != null) {
+      return;
+    }
 
-      if (awaitingOperand) {
+    final double current = double.parse(display);
+
+    if (awaitingOperand) {
+      setState(() {
         pendingOperator = operator;
         expression = expression.replaceFirst(
           RegExp(r'[+−×÷]\s*$'),
           '$operator ',
         );
-        return;
-      }
+      });
+      return;
+    }
 
+    if (accumulator != null &&
+        pendingOperator == '÷' &&
+        current == 0) {
+      showError('Cannot divide by zero.');
+      return;
+    }
+
+    setState(() {
       if (accumulator != null && pendingOperator != null) {
-        expression += '$display ';
+        expression += '$currentExpression ';
         accumulator = calculate(
           accumulator!,
           current,
           pendingOperator!,
         );
       } else {
-        expression = '$display ';
+        expression = '$currentExpression ';
         accumulator = current;
       }
 
       display = formatNumber(accumulator!);
+      currentExpression = display;
       expression += '$operator ';
       pendingOperator = operator;
       awaitingOperand = true;
@@ -186,15 +239,21 @@ class _CalculatorPageState extends State<CalculatorPage> {
   }
 
   void pressEquals() {
-    if (awaitingOperand ||
+    if (errorMessage != null ||
+        awaitingOperand ||
         accumulator == null ||
         pendingOperator == null) {
       return;
     }
 
-    setState(() {
-      final double current = double.parse(display);
+    final double current = double.parse(display);
 
+    if (pendingOperator == '÷' && current == 0) {
+      showError('Cannot divide by zero.');
+      return;
+    }
+
+    setState(() {
       final double result = calculate(
         accumulator!,
         current,
@@ -202,19 +261,14 @@ class _CalculatorPageState extends State<CalculatorPage> {
       );
 
       final String completedExpression =
-          '$expression$display';
+          '$expression$currentExpression';
 
       final String formattedResult = formatNumber(result);
 
-      history.insert(
-        0,
-        CalculationRecord(
-          expression: completedExpression,
-          result: formattedResult,
-        ),
-      );
+      saveHistory(completedExpression, formattedResult);
 
       display = formattedResult;
+      currentExpression = formattedResult;
       accumulator = null;
       pendingOperator = null;
       awaitingOperand = false;
@@ -223,25 +277,96 @@ class _CalculatorPageState extends State<CalculatorPage> {
     });
   }
 
+  void applyAdvancedOperation(
+    String symbol,
+    double Function(double) operation,
+  ) {
+    if (errorMessage != null) {
+      return;
+    }
+
+    final double current =
+        awaitingOperand ? (accumulator ?? 0) : double.parse(display);
+
+    if (symbol == '√' && current < 0) {
+      showError('Cannot calculate the square root of a negative number.');
+      return;
+    }
+
+    final double result = operation(current);
+    final String formattedResult = formatNumber(result);
+
+    String calculation;
+
+    switch (symbol) {
+      case '%':
+        calculation = '$currentExpression %';
+        break;
+      case '√':
+        calculation = '√($currentExpression)';
+        break;
+      case '±':
+        calculation = '±($currentExpression)';
+        break;
+      default:
+        calculation = currentExpression;
+    }
+
+    setState(() {
+      if (awaitingOperand) {
+        accumulator = null;
+        pendingOperator = null;
+        expression = '';
+      }
+
+      display = formattedResult;
+      currentExpression = calculation;
+      awaitingOperand = false;
+
+      if (pendingOperator == null) {
+        saveHistory(calculation, formattedResult);
+        resultShown = true;
+      } else {
+        resultShown = false;
+      }
+    });
+  }
+
+  void enterPercentage() {
+    applyAdvancedOperation('%', (value) => value / 100);
+  }
+
+  void enterSquareRoot() {
+    applyAdvancedOperation('√', (value) => math.sqrt(value));
+  }
+
+  void toggleSign() {
+    applyAdvancedOperation('±', (value) => -value);
+  }
+
   void clearCalculator() {
     setState(() {
       display = '0';
+      currentExpression = '0';
       accumulator = null;
       pendingOperator = null;
       awaitingOperand = false;
       resultShown = false;
       expression = '';
+      errorMessage = null;
     });
   }
 
   void reuseHistoryResult(String result) {
     setState(() {
       display = result;
+      currentExpression = result;
       accumulator = null;
       pendingOperator = null;
       awaitingOperand = false;
       resultShown = true;
       expression = '';
+      errorMessage = null;
     });
 
     Navigator.of(context).pop();
@@ -297,9 +422,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                     Expanded(
                       child: history.isEmpty
                           ? const Center(
-                              child: Text(
-                                'No calculations yet.',
-                              ),
+                              child: Text('No calculations yet.'),
                             )
                           : ListView.separated(
                               itemCount: history.length,
@@ -318,9 +441,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  trailing: const Icon(
-                                    Icons.north_west,
-                                  ),
+                                  trailing: const Icon(Icons.north_west),
                                   onTap: () {
                                     reuseHistoryResult(record.result);
                                   },
@@ -358,6 +479,15 @@ class _CalculatorPageState extends State<CalculatorPage> {
         break;
       case 'AC':
         clearCalculator();
+        break;
+      case '%':
+        enterPercentage();
+        break;
+      case '√':
+        enterSquareRoot();
+        break;
+      case '±':
+        toggleSign();
         break;
     }
   }
