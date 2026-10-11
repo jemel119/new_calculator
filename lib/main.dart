@@ -31,6 +31,16 @@ class CalculatorPage extends StatefulWidget {
   State<CalculatorPage> createState() => _CalculatorPageState();
 }
 
+class CalculationRecord {
+  final String expression;
+  final String result;
+
+  const CalculationRecord({
+    required this.expression,
+    required this.result,
+  });
+}
+
 class _CalculatorPageState extends State<CalculatorPage> {
   String display = '0';
 
@@ -39,6 +49,10 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
   bool awaitingOperand = false;
   bool resultShown = false;
+
+  String expression = '';
+
+  final List<CalculationRecord> history = [];
 
   final List<String> buttons = [
     'AC', 'DEL', '√', '÷',
@@ -95,6 +109,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
         pendingOperator = null;
         awaitingOperand = false;
         resultShown = false;
+        expression = '';
         display = digit;
         return;
       }
@@ -120,6 +135,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
         pendingOperator = null;
         awaitingOperand = false;
         resultShown = false;
+        expression = '';
         display = '0.';
         return;
       }
@@ -142,20 +158,27 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
       if (awaitingOperand) {
         pendingOperator = operator;
+        expression = expression.replaceFirst(
+          RegExp(r'[+−×÷]\s*$'),
+          '$operator ',
+        );
         return;
       }
 
       if (accumulator != null && pendingOperator != null) {
+        expression += '$display ';
         accumulator = calculate(
           accumulator!,
           current,
           pendingOperator!,
         );
       } else {
+        expression = '$display ';
         accumulator = current;
       }
 
       display = formatNumber(accumulator!);
+      expression += '$operator ';
       pendingOperator = operator;
       awaitingOperand = true;
       resultShown = false;
@@ -178,11 +201,25 @@ class _CalculatorPageState extends State<CalculatorPage> {
         pendingOperator!,
       );
 
-      display = formatNumber(result);
+      final String completedExpression =
+          '$expression$display';
+
+      final String formattedResult = formatNumber(result);
+
+      history.insert(
+        0,
+        CalculationRecord(
+          expression: completedExpression,
+          result: formattedResult,
+        ),
+      );
+
+      display = formattedResult;
       accumulator = null;
       pendingOperator = null;
       awaitingOperand = false;
       resultShown = true;
+      expression = '';
     });
   }
 
@@ -193,7 +230,112 @@ class _CalculatorPageState extends State<CalculatorPage> {
       pendingOperator = null;
       awaitingOperand = false;
       resultShown = false;
+      expression = '';
     });
+  }
+
+  void reuseHistoryResult(String result) {
+    setState(() {
+      display = result;
+      accumulator = null;
+      pendingOperator = null;
+      awaitingOperand = false;
+      resultShown = true;
+      expression = '';
+    });
+
+    Navigator.of(context).pop();
+  }
+
+  void clearHistory() {
+    setState(() {
+      history.clear();
+    });
+  }
+
+  void showHistory() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, updateSheet) {
+            return SafeArea(
+              child: FractionallySizedBox(
+                heightFactor: 0.65,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Calculation History',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: history.isEmpty
+                                ? null
+                                : () {
+                                    clearHistory();
+                                    updateSheet(() {});
+                                  },
+                            child: const Text('Clear History'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: history.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No calculations yet.',
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: history.length,
+                              separatorBuilder: (context, index) {
+                                return const Divider(height: 1);
+                              },
+                              itemBuilder: (context, index) {
+                                final record = history[index];
+
+                                return ListTile(
+                                  title: Text(record.expression),
+                                  subtitle: Text(
+                                    '= ${record.result}',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  trailing: const Icon(
+                                    Icons.north_west,
+                                  ),
+                                  onTap: () {
+                                    reuseHistoryResult(record.result);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void onButtonPressed(String value) {
@@ -262,6 +404,13 @@ class _CalculatorPageState extends State<CalculatorPage> {
       appBar: AppBar(
         title: const Text('Calculator State Lab'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: showHistory,
+            tooltip: 'Calculation history',
+            icon: const Icon(Icons.history),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
