@@ -115,6 +115,13 @@ class _CalculatorPageState extends State<CalculatorPage> {
     );
   }
 
+  void showFeedback(String message) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   void showError(String message) {
     setState(() {
       errorMessage = message;
@@ -127,9 +134,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
       expression = '';
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    showFeedback(message);
   }
 
   void enterDigit(String digit) {
@@ -344,6 +349,51 @@ class _CalculatorPageState extends State<CalculatorPage> {
     applyAdvancedOperation('±', (value) => -value);
   }
 
+  void deleteLastCharacter() {
+    if (errorMessage != null) {
+      clearCalculator();
+      return;
+    }
+
+    if (awaitingOperand && pendingOperator != null) {
+      setState(() {
+        pendingOperator = null;
+        awaitingOperand = false;
+        resultShown = false;
+        expression = '';
+        currentExpression = display;
+      });
+
+      showFeedback('Pending operator removed.');
+      return;
+    }
+
+    if (resultShown) {
+      showFeedback('Start a new calculation or press AC.');
+      return;
+    }
+
+    if (display == '0') {
+      showFeedback('Nothing to delete.');
+      return;
+    }
+
+    setState(() {
+      if (display.length <= 1 ||
+          (display.startsWith('-') && display.length <= 2)) {
+        display = '0';
+      } else {
+        display = display.substring(0, display.length - 1);
+
+        if (display == '-' || display.isEmpty) {
+          display = '0';
+        }
+      }
+
+      currentExpression = display;
+    });
+  }
+
   void clearCalculator() {
     setState(() {
       display = '0';
@@ -480,6 +530,9 @@ class _CalculatorPageState extends State<CalculatorPage> {
       case 'AC':
         clearCalculator();
         break;
+      case 'DEL':
+        deleteLastCharacter();
+        break;
       case '%':
         enterPercentage();
         break;
@@ -499,32 +552,42 @@ class _CalculatorPageState extends State<CalculatorPage> {
     final bool isSpecial =
         ['AC', 'DEL', '√', '±', '%'].contains(value);
 
-    return Padding(
-      padding: const EdgeInsets.all(4),
-      child: ElevatedButton(
-        onPressed: () => onButtonPressed(value),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isOperator
-              ? Colors.deepPurple
-              : isSpecial
-                  ? Colors.deepPurple.shade100
-                  : Colors.white,
-          foregroundColor: isOperator
-              ? Colors.white
-              : Colors.black87,
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
+    final button = ElevatedButton(
+      onPressed: () => onButtonPressed(value),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isOperator
+            ? Colors.deepPurple
+            : isSpecial
+                ? Colors.deepPurple.shade100
+                : Colors.white,
+        foregroundColor: isOperator
+            ? Colors.white
+            : Colors.black87,
+        padding: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
+      child: Text(
+        value,
+        style: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: value == 'DEL'
+          ? GestureDetector(
+              onLongPress: () {
+                clearCalculator();
+                showFeedback('Current calculation cleared.');
+              },
+              child: button,
+            )
+          : button,
     );
   }
 
